@@ -199,6 +199,7 @@ connectToDatabase();
 // ✅ Define Message Schema
 const messageSchema = new mongoose.Schema({
   sender: String,
+  receiver: String, // Add this field
   content: String,
   fileUrl: String,
   fileName: String,
@@ -301,28 +302,49 @@ app.post("/upload", upload.single("file"), async (req, res) => {
 io.on("connection", async (socket) => {
   console.log("🟢 User connected:", socket.id);
 
-  // Load all previous messages from DB
-  try {
-    const previousMessages = await Message.find().sort({ timestamp: 1 });
-    socket.emit("previous-messages", previousMessages);
-  } catch (error) {
-    console.error("❌ Error fetching messages from DB:", error);
+  // Retrieve username from handshake query and join the room
+  const { username } = socket.handshake.query;
+  if (username) {
+    socket.join(username);
+    console.log(`${username} joined room ${username}`);
   }
 
-  // ✅ SINGLE PLACE for creating & broadcasting a message
+  // Load previous messages for the logged-in user
+  socket.on("load-messages", async (data) => {
+    const { sender, receiver } = data;
+    try {
+      const previousMessages = await Message.find({
+        $or: [
+          { sender, receiver },
+          { sender: receiver, receiver: sender },
+        ],
+      }).sort({ timestamp: 1 });
+      socket.emit("previous-messages", previousMessages);
+    } catch (error) {
+      console.error("❌ Error fetching messages from DB:", error);
+    }
+  });
+
+  // Handle sending a message
   socket.on("send-message", async (msg) => {
     try {
-      // msg should include { sender, content, fileUrl, fileName, fileType } as needed
+      const { sender, receiver, content, fileUrl, fileName, fileType } = msg;
+
+      // Save the message to the database
       const newMessage = new Message({
-        sender: msg.sender,
-        content: msg.content || "",
-        fileUrl: msg.fileUrl || "",
-        fileName: msg.fileName || "",
-        fileType: msg.fileType || "",
+        sender,
+        receiver,
+        content: content || "",
+        fileUrl: fileUrl || "",
+        fileName: fileName || "",
+        fileType: fileType || "",
       });
 
       await newMessage.save();
-      io.emit("new-message", newMessage);
+
+      // Emit the message to the sender and receiver
+      io.to(sender).emit("new-message", newMessage);
+      io.to(receiver).emit("new-message", newMessage);
     } catch (error) {
       console.error("❌ Error saving message:", error);
     }
