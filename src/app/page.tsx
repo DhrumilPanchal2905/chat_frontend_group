@@ -65,7 +65,7 @@ export default function ChatApp() {
 
   useEffect(() => {
     if (isLoggedIn && currentUser) {
-      const socketInstance = io("http://localhost:3001", {
+      const socketInstance = io("https://chat-backend-group.onrender.com", {
         query: { username: currentUser.username, role: "user" },
       });
 
@@ -161,7 +161,7 @@ export default function ChatApp() {
         }
       };
 
-      xhr.open("POST", "http://localhost:3001/upload");
+      xhr.open("POST", "https://chat-backend-group.onrender.com/upload");
       xhr.send(formData);
     } else {
       const messageData: Message = {
